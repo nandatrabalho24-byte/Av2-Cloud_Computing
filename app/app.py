@@ -7,7 +7,7 @@ o cache está velho (ver refresh_stale_series abaixo).
 Variáveis de ambiente esperadas (ver .env.example):
   AIVEN_DB_URL   -> string de conexão fornecida pela Aiven
   PORT           -> porta HTTP (default 8080)
-  CACHE_HOURS    -> horas antes de buscar dados novos na API (default 6)
+  CACHE_HOURS    -> horas antes de buscar dados novos na API (default 24)
 """
 
 import os
@@ -20,7 +20,7 @@ import bcb_client as bcb
 
 app = Flask(__name__)
 
-CACHE_HOURS = int(os.environ.get("CACHE_HOURS", 6))
+CACHE_HOURS = int(os.environ.get("CACHE_HOURS", 24))
 START_TIME = time.time()
 
 # Garante que as tabelas existam assim que o módulo é carregado — necessário
@@ -67,11 +67,14 @@ def get_series_data(series_code: int):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT ref_date, value
-                FROM bcb_series
-                WHERE series_code = %s
-                ORDER BY ref_date ASC
-                LIMIT %s;
+                SELECT ref_date, value FROM (
+                    SELECT ref_date, value
+                    FROM bcb_series
+                    WHERE series_code = %s
+                    ORDER BY ref_date DESC
+                    LIMIT %s
+                ) recent
+                ORDER BY ref_date ASC;
                 """,
                 (series_code, bcb.POINTS_PER_SERIES),
             )
@@ -90,16 +93,41 @@ def get_dashboard_data():
         if latest and previous:
             delta = round(float(latest["value"]) - float(previous["value"]), meta["casas"])
 
+        values = [round(float(r["value"]), meta["casas"]) for r in rows]
+        last12 = values[-12:]
+        stats = None
+        if values:
+            stats = {
+                "avg12": round(sum(last12) / len(last12), meta["casas"]),
+                "min": min(values),
+                "max": max(values),
+                "min_label": rows[values.index(min(values))]["ref_date"].strftime("%m/%Y"),
+                "max_label": rows[values.index(max(values))]["ref_date"].strftime("%m/%Y"),
+                "year_delta": round(values[-1] - values[-13], meta["casas"]) if len(values) > 12 else None,
+            }
+        table = []
+        for i in range(len(rows) - 1, max(len(rows) - 13, -1), -1):
+            table.append(
+                {
+                    "label": rows[i]["ref_date"].strftime("%m/%Y"),
+                    "value": values[i],
+                    "delta": round(values[i] - values[i - 1], meta["casas"]) if i > 0 else None,
+                }
+            )
+
         indicators.append(
             {
                 "code": code,
                 "name": meta["name"],
+                "desc": meta.get("desc", ""),
                 "unit": meta["unit"],
-                "latest_value": round(float(latest["value"]), meta["casas"]) if latest else None,
-                "latest_date": latest["ref_date"].strftime("%d/%m/%Y") if latest else None,
+                "latest_value": values[-1] if values else None,
+                "latest_date": latest["ref_date"].strftime("%m/%Y") if latest else None,
                 "delta": delta,
-                "labels": [r["ref_date"].strftime("%d/%m") for r in rows],
-                "values": [round(float(r["value"]), meta["casas"]) for r in rows],
+                "stats": stats,
+                "table": table,
+                "labels": [r["ref_date"].strftime("%m/%Y") for r in rows],
+                "values": values,
             }
         )
 

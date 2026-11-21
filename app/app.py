@@ -1,3 +1,4 @@
+# pipeline test
 """
 Dashboard de Indicadores Econômicos — App Flask
 Lê os indicadores do Postgres da Aiven (tabela bcb_series). Os dados chegam

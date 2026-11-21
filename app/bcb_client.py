@@ -125,7 +125,7 @@ def fetch_series_from_bcb(series_code: int, n: int = POINTS_PER_SERIES):
     isso usamos aqui o endpoint padrão com `dataInicial`/`dataFinal`, que
     funciona normalmente, e pegamos só os últimos N pontos retornados.
     """
-    days_back = n * 3  # margem folgada: nem todo dia tem valor (fins de semana, feriados etc.)
+    days_back = n * 32  # série mensal: 1 ponto por mês, com margem    
     today = datetime.date.today()
     start = today - datetime.timedelta(days=days_back)
 

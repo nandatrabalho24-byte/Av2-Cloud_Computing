@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Juros de Veículos — Dashboard BCB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+  {% set ind = data.indicators[0] %}
+  <main>
+    <header class="top">
+      <div>
+        <p class="eyebrow">Banco Central do Brasil · SGS {{ ind.code }}</p>
+        <h1>Juros do financiamento de veículos</h1>
+        <p class="subtitle">{{ ind.desc }}.</p>
+      </div>
+      <span class="pill"><i></i> PostgreSQL · Aiven</span>
+    </header>
+
+    <section class="cards">
+      <article class="card hero">
+        <span class="label">Taxa atual · {{ ind.latest_date or "—" }}</span>
+        <span class="value">{{ ind.latest_value if ind.latest_value is not none else "—" }}<small>{{ ind.unit }}</small></span>
+        {% if ind.delta is not none %}
+        <span class="meta"><b class="{{ 'up' if ind.delta > 0 else ('down' if ind.delta < 0 else '') }}">
+          {{ "▲" if ind.delta > 0 else ("▼" if ind.delta < 0 else "■") }} {{ "%+.2f"|format(ind.delta) }} p.p.</b> vs. mês anterior</span>
+        {% endif %}
+      </article>
+
+      {% if ind.stats %}
+      <article class="card">
+        <span class="label">Média 12 meses</span>
+        <span class="value">{{ ind.stats.avg12 }}<small>{{ ind.unit }}</small></span>
+        {% if ind.stats.year_delta is not none %}
+        <span class="meta"><b class="{{ 'up' if ind.stats.year_delta > 0 else ('down' if ind.stats.year_delta < 0 else '') }}">{{ "%+.2f"|format(ind.stats.year_delta) }} p.p.</b> em 12 meses</span>
+        {% endif %}
+      </article>
+      <article class="card">
+        <span class="label">Mínima do período</span>
+        <span class="value">{{ ind.stats.min }}<small>{{ ind.unit }}</small></span>
+        <span class="meta">{{ ind.stats.min_label }}</span>
+      </article>
+      <article class="card">
+        <span class="label">Máxima do período</span>
+        <span class="value">{{ ind.stats.max }}<small>{{ ind.unit }}</small></span>
+        <span class="meta">{{ ind.stats.max_label }}</span>
+      </article>
+      {% endif %}
+
+      <article class="card muted">
+        <span class="label">Acessos ao dashboard</span>
+        <span class="value">{{ data.total_visits }}</span>
+        <span class="meta">uptime {{ data.uptime_seconds }}s</span>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Evolução mensal</h2>
+        <span class="hint">últimos {{ ind.labels|length }} meses</span>
+      </div>
+      <div class="chart-wrap"><canvas id="indicatorsChart"></canvas></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Últimos 12 meses</h2>
+        <span class="hint">{{ ind.unit }}</span>
+      </div>
+      <table>
+        <thead><tr><th>Mês</th><th class="num">Taxa</th><th class="num">Variação</th></tr></thead>
+        <tbody>
+          {% for row in ind.table %}
+          <tr>
+            <td>{{ row.label }}</td>
+            <td class="num">{{ "%.2f"|format(row.value) }}</td>
+            <td class="num">
+              {% if row.delta is none %}—{% else %}
+              <span class="{{ 'up' if row.delta > 0 else ('down' if row.delta < 0 else '') }}">{{ "%+.2f"|format(row.delta) }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <footer>
+      Dados: <a href="https://dadosabertos.bcb.gov.br/" target="_blank" rel="noopener">dadosabertos.bcb.gov.br</a>
+      · cache de {{ data.cache_hours }}h · atualiza a cada 60s ·
+      <a href="/api/indicators">/api/indicators</a> · <a href="/healthz">/healthz</a>
+    </footer>
+  </main>
+
+  <script>
+    const ind = {{ ind | tojson }};
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue('--accent').trim();
+    const grid = css.getPropertyValue('--line').trim();
+    const muted = css.getPropertyValue('--muted').trim();
+
+    const canvas = document.getElementById('indicatorsChart');
+    const g = canvas.getContext('2d').createLinearGradient(0, 0, 0, 320);
+    g.addColorStop(0, accent + '55');
+    g.addColorStop(1, accent + '00');
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: ind.labels,
+        datasets: [{
+          label: ind.name + ' (' + ind.unit + ')',
+          data: ind.values,
+          borderColor: accent,
+          backgroundColor: g,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: muted, maxTicksLimit: 8 } },
+          y: { grid: { color: grid }, ticks: { color: muted, callback: v => v.toFixed(2) } }
+        }
+      }
+    });
+
+    setTimeout(() => location.reload(), 60000);
+  </script>
+</body>
+</html>

@@ -6,14 +6,16 @@ on:
     paths:
       - "app/**"
       - "Dockerfile"
+      - ".github/workflows/ci-cd.yml"
   pull_request:
     branches: [main]
     paths:
       - "app/**"
       - "Dockerfile"
+      - ".github/workflows/ci-cd.yml"
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}/dashboard-app
+  IMAGE_NAME: ghcr.io/nandatrabalho24-byte/av2-cloud_computing/dashboard-app
 
 jobs:
   test:
